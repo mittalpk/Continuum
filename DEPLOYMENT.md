@@ -35,7 +35,14 @@ Apply the schema from [SRS.md §6](SRS.md#6-data-model):
 cockroach sql --url "$DATABASE_URL" -f infra/sql/schema.sql
 ```
 
-Don't skip the isolated spike. Per SRS §14 and risk R-02, validate Distributed Vector Indexing and a manual region failure before wiring up the Lambda or the agent. A throwaway insert/select/simulated-failure script against this cluster, run on its own, is enough.
+Don't skip the isolated spike. Per SRS §14 and risk R-02, validate Distributed Vector Indexing and a manual region failure before wiring up the Lambda or the agent:
+
+```bash
+export DATABASE_URL="postgresql://root@<host>:26257/spike?sslmode=verify-full"
+uv run spikes/vector_index_spike.py --keep
+```
+
+Then follow the failover procedure in [RUNBOOK.md §1](RUNBOOK.md#1-regional-failover-drill) against the rows it leaves behind. See [spikes/README.md](spikes/README.md) for what this does and doesn't cover.
 
 ## 3. Deploy the Continuum MCP server (Lambda)
 
