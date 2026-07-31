@@ -1,0 +1,27 @@
+# Dotfiles/dot-directories are ignored by default (includes, .venv/,
+# .env, editor/OS dotfiles, etc.). Explicitly un-ignore the ones that must be
+# tracked below — anything not listed stays local-only.
+.*
+!.gitignore
+!.github
+!.github/**
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup
+infra/terraform/*.tfvars
+!infra/terraform/*.tfvars.example
+
+# Build artifacts
+infra/build/
