@@ -4,8 +4,14 @@
 # whatever real Python exists (spikes/, which is self-contained via PEP 723 inline
 # script metadata and needs no project install). Once pyproject.toml is committed,
 # the package-dependent steps below activate automatically -- nothing here needs
-# editing when that happens. The CockroachDB service container's exact startup args
-# still need validation once integration tests actually exist to run against it.
+# editing when that happens.
+#
+# CockroachDB is started via a plain `docker run` step, not the `services:` block --
+# GitHub Actions service containers only support setting image/env/ports/options,
+# with no way to override the container's command, and cockroachdb/cockroach needs
+# `start-single-node --insecure` as its command to actually run. Without that it
+# just executes its default command and exits immediately, which is why the
+# services-block version failed before any workflow step even ran.
 name: CI
 
 on:
@@ -16,17 +22,24 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      cockroachdb:
-        image: cockroachdb/cockroach:latest
-        ports:
-          - 26257:26257
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health?ready=1 || exit 1"
-          --health-interval 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start CockroachDB (single-node, insecure, CI only)
+        run: |
+          docker run -d --name cockroachdb -p 26257:26257 -p 8080:8080 \
+            cockroachdb/cockroach:latest start-single-node --insecure
+          for i in $(seq 1 30); do
+            if docker exec cockroachdb ./cockroach sql --insecure -e "SELECT 1" >/dev/null 2>&1; then
+              echo "CockroachDB is ready"
+              exit 0
+            fi
+            echo "Waiting for CockroachDB... ($i/30)"
+            sleep 2
+          done
+          echo "CockroachDB did not become ready in time" >&2
+          docker logs cockroachdb
+          exit 1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -61,3 +74,7 @@ jobs:
       - name: Build package
         if: steps.package.outputs.exists == 'true'
         run: uv build --wheel
+
+      - name: Stop CockroachDB
+        if: always()
+        run: docker rm -f cockroachdb
