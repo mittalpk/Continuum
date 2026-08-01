@@ -8,22 +8,18 @@ This document assumes the system already exists. The one-time path for building 
 
 This is the most important procedure in the document: an operational drill, and the shot list for the demo video (SRS Appendix A).
 
-**Preconditions:** `prod`/demo environment deployed per [DEPLOYMENT.md](DEPLOYMENT.md), cluster healthy in both regions.
+**Preconditions:** cluster provisioned per [DEPLOYMENT.md](DEPLOYMENT.md), healthy across all regions.
 
-**Steps:**
+**Run it:**
 
-1. Confirm cluster health: `ccloud cluster describe continuum-prod`, both regions should report nodes up.
-2. Write a marker memory via `store_memory` (semantic tier, distinctive content, e.g. `"failover-drill-marker-<timestamp>"`). Record the returned `id`.
-3. Confirm the write via `recall_memory`. Content should match exactly.
-4. **Start the recovery timer.**
-5. Simulate a regional failure:
-   - If CockroachDB Cloud's console/API exposes a region-isolation or node-drain control, use it against Region A's nodes.
-   - Otherwise, simulate it via network partition (block outbound traffic from the Lambda's VPC to Region A's node IPs). Document which method was used; it affects what the drill actually proves.
-6. Immediately retry `recall_memory` for the marker memory, targeting the surviving region.
-7. **Stop the timer** once a successful read returns.
-8. Verify: content is byte-identical to step 2–3, no error was returned mid-transition beyond expected transient connection retries.
-9. Record the elapsed time against NFR-AVAIL-01's < 30s target.
-10. Restore Region A (undo the drain/partition); confirm the cluster returns to a fully healthy 2-region state before ending the drill.
+```bash
+export DATABASE_URL="<cluster connection string>"
+uv run scripts/failover_drill.py
+```
+
+The script writes a marker row, confirms it, then pauses and waits for you to actually fail a region. That's the one part it can't automate: CockroachDB Cloud's region isolation and node-drain controls are a console or API action, not something the script can trigger. Once you continue, it times the recovery, checks the result against NFR-AVAIL-01's 30s target, and prompts you to restore the region before finishing. See [scripts/failover_drill.py](scripts/failover_drill.py)'s docstring for exactly what it does and doesn't cover.
+
+The one manual step in the middle still matters for what the drill proves: use CockroachDB Cloud's region-isolation or node-drain control if the console exposes one, or a network-partition workaround otherwise, and note which method you used in `docs/LOG.md`. That's step 4 in the script's own prompt.
 
 **Frequency:** Before every demo recording, and after any change to cluster topology or Terraform config in `DEPLOYMENT.md`.
 
