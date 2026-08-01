@@ -67,7 +67,7 @@ Full `CREATE TABLE` statements are in [SRS.md §6](SRS.md#6-data-model). Summary
 |---|---|---|
 | `working_memory` | `(session_id, key)` | Row-level TTL (`expires_at`), no cron job needed |
 | `episodic_memory` | `episode_id` | `(actor_id, created_at DESC)`, serves `list_episodes`'s recency scan |
-| `semantic_memory` | `memory_id` | Distributed Vector Indexing on `embedding`; secondary `actor_id` index bounds the ANN search space per query |
+| `semantic_memory` | `memory_id` | Distributed Vector Indexing on `embedding` (`vector_cosine_ops`, matching `recall_memory`'s `<=>` operator); secondary `actor_id` index bounds the ANN search space per query |
 
 **Region placement.** CockroachDB Cloud's multi-region table locality (`REGIONAL BY ROW` vs. `GLOBAL`) gets chosen per table, based on how each one is actually accessed:
 - `episodic_memory` and `semantic_memory` get written and read from wherever the session happens to be routed, so `REGIONAL BY ROW` keeps the leaseholder near the writer and latency low for the common case.
