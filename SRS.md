@@ -59,7 +59,7 @@ Continuum splits memory into three explicit tiers, each stored and indexed for i
 graph LR
     User[End User] -->|conversation| Agent[Reference Agent<br/>Amazon Bedrock Agents]
     Agent -->|MCP tool calls| Gateway[Continuum MCP Server<br/>AWS Lambda]
-    Gateway -->|SQL + vector search| DB[(CockroachDB Cloud<br/>≥2 regions)]
+    Gateway -->|SQL + vector search| DB[(CockroachDB Cloud<br/>3 regions)]
     Judge[Hackathon Judge] -->|reads| Repo[Public Repo + Demo Video]
     Repo -.->|documents| Gateway
     Repo -.->|documents| DB
@@ -103,7 +103,7 @@ Each requirement carries an ID, description, rationale, and acceptance criteria 
 
 ### FR-3: Multi-Region Distribution, Demoed Live
 
-**Description.** The CockroachDB cluster runs across ≥2 cloud regions (CockroachDB Cloud's standard multi-region topology). The demo video shows, in sequence: a memory write, a simulated regional failure, and a subsequent read from a surviving region proving the write was not lost or corrupted.
+**Description.** The CockroachDB cluster runs across 3 cloud regions, with the database configured for CockroachDB's REGION survival goal (the minimum required to survive losing a whole region, see §6). The demo video shows, in sequence: a memory write, a simulated regional failure, and a subsequent read from a surviving region proving the write was not lost or corrupted.
 
 **Rationale.** This is what actually separates this entry from a plain Postgres+pgvector build, and it's the single highest-value 20 seconds of the submission video.
 
@@ -204,13 +204,24 @@ graph TB
 | Reference Agent (Bedrock Agents) | Reasoning loop; decides when to call which memory tool | The only consumer FR-5 requires. Any MCP client could substitute (NFR-PORT-01) |
 | Continuum MCP Server (Lambda) | Implements the 4 MCP tools; validates input; issues SQL against CockroachDB | Stateless. All state lives in CockroachDB, so Lambda cold starts don't lose anything |
 | Bedrock Embeddings Model | Converts semantic-memory text to vectors on write and query | One embedding model for the whole system; no per-tenant model routing (out of scope, §13) |
-| CockroachDB Cloud cluster (≥2 regions) | Durable storage, Distributed Vector Indexing for semantic recall, Raft-replicated consistency | The system under test for FR-3's failover demo |
+| CockroachDB Cloud cluster (3 regions) | Durable storage, Distributed Vector Indexing for semantic recall, Raft-replicated consistency | The system under test for FR-3's failover demo |
 
 **Stack.** Python (Lambda handlers, MCP tool implementations, directly reusing patterns from `mcp-server-pgvector`); CockroachDB Cloud free/trial tier; Bedrock Agents for the reasoning loop; a Bedrock-hosted embeddings model for the semantic tier.
 
 ---
 
 ## 6. Data Model
+
+**Prerequisite: the database itself has to be configured multi-region before any of this matters.** Provisioning a cluster across 3 regions only puts nodes in those regions; a database created on it defaults to single-region behavior (zone-level survival goal, no cross-region replica placement) until explicitly told otherwise. Every table below assumes this has already been run once against the target database:
+
+```sql
+ALTER DATABASE <database> SET PRIMARY REGION "<primary-region>";
+ALTER DATABASE <database> ADD REGION "<region-b>";
+ALTER DATABASE <database> ADD REGION "<region-c>";
+ALTER DATABASE <database> SURVIVE REGION FAILURE;
+```
+
+This is what actually gets CockroachDB to replicate ranges across all 3 regions (raising the replication factor from 3 to 5, per CockroachDB's own multi-region documentation) and is the entire precondition for FR-3's failover demo meaning anything. Skipping it doesn't error or warn; it just leaves the database silently single-region, which is exactly the gap this project shipped with until it was caught during the Day 2 gate check (see `.archive/LOG.md`, 2026-08-01).
 
 ```sql
 -- Working memory: short-lived session state
@@ -262,6 +273,7 @@ CREATE TABLE semantic_memory (
 - `semantic_memory`'s Distributed Vector Indexing index handles `recall_memory`'s ANN search. The secondary `actor_id` index lets it pre-filter to one actor before the vector search runs, which bounds the search space per query. Worth having even under single-tenant scope (§13), since it's what keeps costs sane once the table has more than a handful of actors in it.
 - The index's operator class (`vector_cosine_ops`) has to match the distance operator `recall_memory` actually queries with (`<=>`, cosine). CockroachDB won't use an index built for one distance metric to satisfy a query ordered by another; get this wrong and every query silently falls back to a full table scan instead of erroring, which only shows up as a latency problem against NFR-PERF-01. Confirmed against a live cluster during the Day 1 spike (`spikes/vector_index_spike.py`).
 - Region placement follows CockroachDB Cloud's standard multi-region table locality settings. Whether `episodic_memory`/`semantic_memory` end up `REGIONAL BY ROW` or `GLOBAL` gets decided during the Week 1 spike (§14), once there's a real cluster to measure the latency/consistency trade-off against, not guessed at here.
+- REGION survival goal (the prerequisite block above) trades write latency for resilience: writes now need to coordinate across 2 of the 3 regions instead of committing locally. This is a real cost against NFR-PERF-02's target, not a free upgrade, and is worth re-measuring once the schema is live rather than assumed away.
 
 ---
 
@@ -419,7 +431,7 @@ Per the hackathon's published rules:
 
 | ID | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|---|
-| R-01 | CockroachDB Cloud's free/trial tier region-count or resource limits block the FR-3 multi-region demo shape | Medium | High | Confirm exact free-tier region and node limits in Week 1, before any agent code gets written. If it's not enough, budget for the smallest paid tier that supports two regions | Maintainer |
+| R-01 | CockroachDB Cloud's free/trial tier region-count or resource limits block the FR-3 multi-region demo shape | Medium | High | Confirm exact free-tier region and node limits in Week 1, before any agent code gets written. If it's not enough, budget for the smallest paid tier that supports three regions | Maintainer |
 | R-02 | The learning curve for CockroachDB's Distributed Vector Indexing plus multi-region setup exceeds the timebox | Medium | High | Time-boxed isolated spike (throwaway script, no agent) in Week 1. If it runs past 3–4 days, descope FR-3's failover demo to something smaller instead of discovering the crunch in Week 3 | Maintainer |
 | R-03 | AWS Bedrock Agents account or access provisioning is delayed | Medium | Medium | Build and test the reference agent against a mocked/local harness first (Week 2), then swap in real Bedrock Agents once access clears | Maintainer |
 | R-04 | Limited developer bandwidth relative to the hackathon's roughly 3.5-week window, given other concurrent commitments | Medium | High | Track weekly time allocation explicitly against the timeline (§14) instead of assuming the full window is available | Maintainer |

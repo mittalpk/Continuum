@@ -11,7 +11,7 @@ Built for the [CockroachDB × AWS "Build with Agentic Memory" Hackathon](https:/
 
 Most agent memory today is either nothing (every session starts blank) or a single vector store with everything dumped in as "semantic." That's not how memory actually works. What happened *this turn* needs different handling than what happened *last week*, which needs different handling than a durable fact about a user. And none of it matters if a region outage wipes it out the moment someone actually relies on it.
 
-Continuum splits memory into three tiers with genuinely different access patterns, exposes them as MCP tools any agent can call, and runs on a CockroachDB cluster spread across at least two regions. The demo kills a region mid-conversation and shows the agent still remembering.
+Continuum splits memory into three tiers with genuinely different access patterns, exposes them as MCP tools any agent can call, and runs on a CockroachDB cluster spread across 3 regions (the minimum CockroachDB requires to actually survive losing one). The demo kills a region mid-conversation and shows the agent still remembering.
 
 Requirements and design rationale: [SRS.md](SRS.md).
 
@@ -20,7 +20,7 @@ Requirements and design rationale: [SRS.md](SRS.md).
 ```mermaid
 graph LR
     Agent[Agent<br/>Amazon Bedrock Agents] -->|MCP tool calls| MCP[Continuum MCP Server<br/>AWS Lambda]
-    MCP -->|SQL + vector search| DB[(CockroachDB Cloud<br/>≥2 regions)]
+    MCP -->|SQL + vector search| DB[(CockroachDB Cloud<br/>3 regions)]
 ```
 
 Three memory tiers, one cluster, four MCP tools: `store_memory`, `recall_memory`, `list_episodes`, `forget_memory`. Details in [ARCHITECTURE.md](ARCHITECTURE.md).
