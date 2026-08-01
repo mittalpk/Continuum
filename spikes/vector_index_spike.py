@@ -45,6 +45,12 @@ SEED_ROWS = [
 
 QUERY_VECTOR = [0.95, 0.05, 0.0, 0.0]  # should match "billing" rows, not the others
 
+# A cost-based optimizer will correctly prefer a full scan over a vector index on a
+# handful of rows -- there's no benefit to an ANN index at that size. To get a
+# meaningful signal on whether Distributed Vector Indexing is actually usable, the
+# table needs enough rows that the index is worth choosing.
+FILLER_ROW_COUNT = 2000
+
 
 def vector_literal(values: list[float]) -> str:
     return "[" + ",".join(str(v) for v in values) + "]"
@@ -75,18 +81,31 @@ def main() -> int:
                     label     STRING NOT NULL,
                     embedding VECTOR({DIMENSION}) NOT NULL,
                     PRIMARY KEY (id),
-                    VECTOR INDEX idx_spike_embedding (embedding)
+                    VECTOR INDEX idx_spike_embedding (embedding vector_cosine_ops)
                 )
                 """
             )
             print("   OK\n")
 
-            print(f"2. Inserting {len(SEED_ROWS)} rows...")
+            print(f"2. Inserting {len(SEED_ROWS)} labeled rows plus {FILLER_ROW_COUNT} filler rows...")
             for label, vec in SEED_ROWS:
                 cur.execute(
                     f"INSERT INTO {TABLE} (label, embedding) VALUES (%s, %s)",
                     (label, vector_literal(vec)),
                 )
+            # Filler rows give the optimizer a real reason to consider the vector index
+            # instead of a full scan -- see FILLER_ROW_COUNT's comment above.
+            cur.execute(
+                f"""
+                INSERT INTO {TABLE} (label, embedding)
+                SELECT
+                    'filler-' || i,
+                    ('[' || random()::text || ',' || random()::text || ','
+                         || random()::text || ',' || random()::text || ']')::VECTOR({DIMENSION})
+                FROM generate_series(1, {FILLER_ROW_COUNT}) AS i
+                """
+            )
+            cur.execute(f"ANALYZE {TABLE}")
             print("   OK\n")
 
             print("3. Running a similarity search (cosine distance) against a 'billing' query vector...")
@@ -114,14 +133,17 @@ def main() -> int:
                 return 1
 
             print("4. Confirming the vector index is actually used (not a full scan)...")
+            # CockroachDB rejects placeholders inside EXPLAIN, so the vector literal is
+            # inlined directly here. Safe in this throwaway script because query_literal
+            # is a fixed constant defined above, not tool-call input -- production code
+            # (the MCP server) must never do this; see SECURITY.md's injection-safety rule.
             cur.execute(
                 f"""
                 EXPLAIN ANALYZE
                 SELECT label FROM {TABLE}
-                ORDER BY embedding <=> %s
+                ORDER BY embedding <=> '{query_literal}'
                 LIMIT 3
-                """,
-                (query_literal,),
+                """
             )
             plan = "\n".join(row[0] for row in cur.fetchall())
             print(plan)

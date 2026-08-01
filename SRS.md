@@ -252,7 +252,7 @@ CREATE TABLE semantic_memory (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (memory_id),
     INDEX idx_semantic_actor (actor_id),
-    VECTOR INDEX idx_semantic_embedding (embedding)  -- CockroachDB Distributed Vector Indexing
+    VECTOR INDEX idx_semantic_embedding (embedding vector_cosine_ops)  -- must match recall_memory's <=> operator
 );
 ```
 
@@ -260,6 +260,7 @@ CREATE TABLE semantic_memory (
 - `working_memory` uses CockroachDB's row-level TTL feature directly. No application-level cron job deletes expired rows, so a demo interruption can't leave stale state around to explain away.
 - `episodic_memory`'s `(actor_id, created_at DESC)` index serves `list_episodes` directly, since that's always a per-actor, recency-ordered scan.
 - `semantic_memory`'s Distributed Vector Indexing index handles `recall_memory`'s ANN search. The secondary `actor_id` index lets it pre-filter to one actor before the vector search runs, which bounds the search space per query. Worth having even under single-tenant scope (§13), since it's what keeps costs sane once the table has more than a handful of actors in it.
+- The index's operator class (`vector_cosine_ops`) has to match the distance operator `recall_memory` actually queries with (`<=>`, cosine). CockroachDB won't use an index built for one distance metric to satisfy a query ordered by another; get this wrong and every query silently falls back to a full table scan instead of erroring, which only shows up as a latency problem against NFR-PERF-01. Confirmed against a live cluster during the Day 1 spike (`spikes/vector_index_spike.py`).
 - Region placement follows CockroachDB Cloud's standard multi-region table locality settings. Whether `episodic_memory`/`semantic_memory` end up `REGIONAL BY ROW` or `GLOBAL` gets decided during the Week 1 spike (§14), once there's a real cluster to measure the latency/consistency trade-off against, not guessed at here.
 
 ---
