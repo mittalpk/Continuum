@@ -104,9 +104,7 @@ def main() -> int:
         elapsed = time.monotonic() - start
         try:
             with (
-                psycopg.connect(
-                    database_url, autocommit=True, connect_timeout=5
-                ) as conn,
+                psycopg.connect(database_url, autocommit=True, connect_timeout=5) as conn,
                 conn.cursor() as cur,
             ):
                 cur.execute(f"SELECT content FROM {TABLE} WHERE id = %s", (marker_id,))
@@ -141,7 +139,7 @@ def main() -> int:
 
     if elapsed <= RTO_TARGET_SECONDS:
         print(
-            f"   PASS: recovered in {elapsed:.1f}s, within NFR-AVAIL-01's {RTO_TARGET_SECONDS}s target.\n"
+            f"   PASS: recovered in {elapsed:.1f}s (target: {RTO_TARGET_SECONDS}s, NFR-AVAIL-01).\n"
         )
     else:
         print(

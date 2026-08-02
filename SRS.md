@@ -256,7 +256,7 @@ CREATE TABLE semantic_memory (
     memory_id    UUID NOT NULL DEFAULT gen_random_uuid(),
     actor_id     STRING NOT NULL,
     content      STRING NOT NULL,
-    embedding    VECTOR(1536) NOT NULL,   -- dimension matches the Bedrock embedding model chosen
+    embedding    VECTOR(1024) NOT NULL,   -- amazon.titan-embed-text-v2:0's default output dimension
     confidence   FLOAT NOT NULL DEFAULT 1.0,
     source_tool  STRING NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -437,7 +437,7 @@ Per the hackathon's published rules:
 | R-04 | Limited developer bandwidth relative to the hackathon's roughly 3.5-week window, given other concurrent commitments | Medium | High | Track weekly time allocation explicitly against the timeline (§14) instead of assuming the full window is available | Maintainer |
 | R-05 | The failover demo looks staged or unconvincing on camera: recovery too fast to see, or narrated instead of shown | Low | High | Rehearse the exact choreography (Appendix A) at least twice before recording. Keep the on-screen timer visible so recovery time is legible, not asserted | Maintainer |
 | R-06 | License choice (MIT vs. Apache 2.0) stays undecided until submission | Low | Low | Decide and lock the license by Week 3, ahead of the final push to submit | Maintainer |
-| R-07 | Embedding-model dimension mismatch between what's written to `semantic_memory.embedding` and what Bedrock's chosen model actually outputs | Low | Medium | Pin the embedding model and dimension in Week 1 alongside the schema (§6). Add a dimension-mismatch regression test | Maintainer |
+| R-07 | Embedding-model dimension mismatch between what's written to `semantic_memory.embedding` and what Bedrock's chosen model actually outputs | Low | Medium | Materialized: the schema originally declared `VECTOR(1536)`, which is OpenAI's dimension, not `amazon.titan-embed-text-v2:0`'s (1024 default). Caught before any real embeddings were written and fixed in §6, Day 3. Still add the dimension-mismatch regression test called for in TESTING.md | Maintainer |
 | R-08 | The 10-day compressed schedule (§14, revised 2026-08-01) leaves less verification depth on non-demo-facing NFRs: NFR-CONS-01's consistency sweep cut from 20× to 5×, NFR-SCALE-01 demoted to best-effort | Low | Low | Neither demoted NFR sits on FR-3/FR-6's demo path. Both get picked back up in the contingency buffer if there's time. Logged, not dropped quietly | Maintainer |
 
 ---

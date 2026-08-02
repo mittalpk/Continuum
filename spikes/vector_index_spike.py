@@ -74,9 +74,7 @@ def main() -> int:
         return 1
 
     with psycopg.connect(database_url, autocommit=True) as conn, conn.cursor() as cur:
-        print(
-            f"1. Creating {TABLE} with a VECTOR({DIMENSION}) column and a vector index..."
-        )
+        print(f"1. Creating {TABLE} with a VECTOR({DIMENSION}) column and a vector index...")
         cur.execute(f"DROP TABLE IF EXISTS {TABLE}")
         cur.execute(
             f"""
@@ -91,9 +89,7 @@ def main() -> int:
         )
         print("   OK\n")
 
-        print(
-            f"2. Inserting {len(SEED_ROWS)} labeled rows plus {FILLER_ROW_COUNT} filler rows..."
-        )
+        print(f"2. Inserting {len(SEED_ROWS)} labeled rows plus {FILLER_ROW_COUNT} filler rows...")
         for label, vec in SEED_ROWS:
             cur.execute(
                 f"INSERT INTO {TABLE} (label, embedding) VALUES (%s, %s)",
