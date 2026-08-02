@@ -69,6 +69,8 @@ Full `CREATE TABLE` statements are in [SRS.md §6](SRS.md#6-data-model). Summary
 | `episodic_memory` | `episode_id` | `(actor_id, created_at DESC)`, serves `list_episodes`'s recency scan |
 | `semantic_memory` | `memory_id` | Distributed Vector Indexing on `embedding` (`vector_cosine_ops`, matching `recall_memory`'s `<=>` operator); secondary `actor_id` index bounds the ANN search space per query |
 
+**Prerequisite the schema depends on.** None of this table locality reasoning means anything until the database itself is configured multi-region: `ALTER DATABASE ... ADD REGION` for each region plus `ALTER DATABASE ... SURVIVE REGION FAILURE`, per [SRS.md §6](SRS.md#6-data-model). A cluster with 3 regions provisioned at the infrastructure level still creates single-region databases by default; this step is what actually gets ranges replicated across regions (replication factor 3 to 5) instead of just sitting in whichever region happened to be primary. Missing it doesn't error, which is exactly how it went unnoticed until the Day 2 gate check caught a failover drill "passing" in 0.0s against a database that was never actually multi-region (`.archive/LOG.md`, 2026-08-01).
+
 **Region placement.** CockroachDB Cloud's multi-region table locality (`REGIONAL BY ROW` vs. `GLOBAL`) gets chosen per table, based on how each one is actually accessed:
 - `episodic_memory` and `semantic_memory` get written and read from wherever the session happens to be routed, so `REGIONAL BY ROW` keeps the leaseholder near the writer and latency low for the common case.
 - `working_memory` is short-lived and session-local, so its region locality just follows the session's origin region.

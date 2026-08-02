@@ -1,6 +1,6 @@
 # Deploying Continuum
 
-This guide provisions a real multi-region Continuum deployment: a CockroachDB Cloud cluster spanning at least two regions, the Lambda-hosted MCP server, and the Bedrock reference agent. For the design behind these choices, see [ARCHITECTURE.md](ARCHITECTURE.md); for what this deployment has to satisfy, see [SRS.md §4](SRS.md#4-non-functional-requirements) (NFRs) and [SRS.md §11](SRS.md#11-required-integrations) (required integrations).
+This guide provisions a real multi-region Continuum deployment: a CockroachDB Cloud cluster spanning 3 regions (CockroachDB's minimum for REGION survival goal), the Lambda-hosted MCP server, and the Bedrock reference agent. For the design behind these choices, see [ARCHITECTURE.md](ARCHITECTURE.md); for what this deployment has to satisfy, see [SRS.md §4](SRS.md#4-non-functional-requirements) (NFRs) and [SRS.md §11](SRS.md#11-required-integrations) (required integrations).
 
 > **Placeholders.** Anywhere you see `<...>` below is an environment-specific value (account IDs, cluster names, region choices) that whoever runs this deployment has to fill in. These aren't invented defaults.
 >
@@ -8,7 +8,7 @@ This guide provisions a real multi-region Continuum deployment: a CockroachDB Cl
 
 ## 1. Prerequisites
 
-- CockroachDB Cloud account with a plan that supports two or more regions. Confirm free/trial tier limits before proceeding (SRS §12, R-01).
+- CockroachDB Cloud account with a plan that supports 3 or more regions (the minimum for REGION survival goal, see SRS §6). Confirm free/trial tier limits before proceeding (SRS §12, R-01).
 - AWS account with Bedrock model access enabled (Bedrock Agents + an embeddings model, e.g. `amazon.titan-embed-text-v2:0`) and Lambda deploy permissions.
 - `terraform` >= 1.6, `aws` CLI configured, `cockroach` CLI (`ccloud`) authenticated.
 - `uv` (Python package manager) for building the Lambda deployment package.
@@ -18,18 +18,38 @@ This guide provisions a real multi-region Continuum deployment: a CockroachDB Cl
 ```bash
 ccloud cluster create continuum-prod \
   --provider aws \
-  --regions <region-a>,<region-b> \
+  --regions <region-a>,<region-b>,<region-c> \
   --nodes 3 \
   --plan <plan-tier>
 ```
 
-Confirm the cluster is healthy and both regions are reporting nodes:
+Three regions, not two. CockroachDB's REGION survival goal (the setting that actually lets the cluster keep serving after losing a whole region) requires a minimum of 3; with 2, losing either one leaves no majority. See [SRS.md §6](SRS.md#6-data-model) for why this isn't optional.
+
+Confirm the cluster is healthy and all three regions are reporting nodes:
 
 ```bash
 ccloud cluster describe continuum-prod
 ```
 
-Apply the schema from [SRS.md §6](SRS.md#6-data-model):
+**Configure the database as multi-region before doing anything else.** This step is easy to skip because nothing errors if you do; the database just silently stays single-region, which is exactly what happened during this project's own Day 2 gate check (`.archive/LOG.md`, 2026-08-01: a failover drill "passed" in 0.0s against a database that was never actually multi-region). Run this once, against whichever database the schema below targets:
+
+```bash
+cockroach sql --url "$DATABASE_URL" -e '
+  ALTER DATABASE defaultdb SET PRIMARY REGION "<region-a>";
+  ALTER DATABASE defaultdb ADD REGION "<region-b>";
+  ALTER DATABASE defaultdb ADD REGION "<region-c>";
+  ALTER DATABASE defaultdb SURVIVE REGION FAILURE;
+'
+```
+
+Verify it actually took before moving on:
+
+```bash
+cockroach sql --url "$DATABASE_URL" -e "SHOW SURVIVAL GOAL FROM DATABASE defaultdb"
+# expect: (defaultdb, region) -- not (defaultdb, NULL)
+```
+
+Now apply the schema from [SRS.md §6](SRS.md#6-data-model):
 
 ```bash
 cockroach sql --url "$DATABASE_URL" -f infra/sql/schema.sql
