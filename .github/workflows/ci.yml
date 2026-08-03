@@ -32,6 +32,7 @@ jobs:
           for i in $(seq 1 30); do
             if docker exec cockroachdb ./cockroach sql --insecure -e "SELECT 1" >/dev/null 2>&1; then
               echo "CockroachDB is ready"
+              docker exec cockroachdb ./cockroach sql --insecure -e "CREATE DATABASE IF NOT EXISTS continuum"
               exit 0
             fi
             echo "Waiting for CockroachDB... ($i/30)"
