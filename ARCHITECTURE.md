@@ -79,12 +79,12 @@ The actual locality settings get finalized against the real cluster during the W
 
 ## 4. Multi-region failover design
 
-This is the system's core differentiating property (SRS FR-3), and it's what `RUNBOOK.md`'s drill exercises directly.
+This is the system's core differentiating property (SRS FR-3). It's proven by configuration and design explanation, not a live demo: region-disruption testing requires a dedicated Advanced-tier cluster, which this project's plan tier doesn't provide (confirmed with the hackathon organizers, `.archive/LOG.md` 2026-08-01). `RUNBOOK.md`'s drill still verifies the write/read path works correctly under normal conditions; it just can't inject the actual regional failure to test recovery from one.
 
-- The cluster runs across two or more CockroachDB Cloud regions from day one, not bolted on later. See `DEPLOYMENT.md`.
+- The cluster runs across 3 CockroachDB Cloud regions from day one, not bolted on later. 3 is CockroachDB's documented minimum for REGION survival goal, not an arbitrary choice. See `DEPLOYMENT.md`.
 - Every write commits via Raft consensus across replicas in multiple regions before it's acknowledged. Losing one region can't lose an acknowledged write, because that's how CockroachDB's replication protocol works, not because Continuum adds anything on top.
 - The Lambda connects to the cluster's SQL gateway rather than a specific node, so a region failure is invisible to the application code. There's no manual failover logic in Continuum itself; correctness comes from CockroachDB's own consensus, not a bespoke retry layer that would need its own testing to trust.
-- What Continuum does own is the demo choreography that proves this live (`RUNBOOK.md`'s failover drill) and the NFR targets in SRS §4 that define what "acceptable" recovery actually means.
+- What Continuum owns is the configuration itself (`SHOW SURVIVAL GOAL` returning `region`, verified against the live cluster) and a clear written explanation of why that configuration is sufficient, per CockroachDB's own documentation. See SRS Appendix A, written for the submission's explanation field rather than as a demo shot list.
 
 ## 5. Design trade-offs
 

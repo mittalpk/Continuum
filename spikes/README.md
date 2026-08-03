@@ -17,4 +17,4 @@ Requires only `uv`; dependencies are declared inline in the script (PEP 723) and
 
 ## Still manual, not scripted here
 
-Per the day-by-day build plan, the region-failure half of the same validation step (write, kill a region, confirm the read survives) is a manual exercise against the CockroachDB Cloud console, not something this script automates. Run `vector_index_spike.py --keep` first to leave seeded rows in place, then follow the failover procedure in `RUNBOOK.md` §1 against those rows before deciding whether the full multi-region demo (FR-3) stays in scope.
+FR-3's multi-region resilience is proven by configuration and written explanation, not a live region kill. Confirmed with the hackathon organizers, since region-disruption testing requires a dedicated Advanced-tier cluster this project's plan tier doesn't provide (see `.archive/LOG.md`, 2026-08-01). Run `vector_index_spike.py --keep` first to leave seeded rows in place, then follow the write/read check in `RUNBOOK.md` §1 against those rows as a sanity check, not a failure simulation.
