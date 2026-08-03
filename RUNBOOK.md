@@ -1,29 +1,34 @@
 # Continuum Runbook
 
-Operational procedures for running an already-deployed Continuum system day-to-day, plus the failover drill that proves [SRS FR-3](SRS.md#fr-3--multi-region-distribution-demoed-live). This is a single-operator project with no on-call team, so every procedure here assumes the maintainer is the one running it.
+Operational procedures for running an already-deployed Continuum system day-to-day, plus the write/read sanity check that backs up [SRS FR-3](SRS.md#fr-3-multi-region-distribution-proven-by-configuration)'s multi-region configuration. This is a single-operator project with no on-call team, so every procedure here assumes the maintainer is the one running it.
 
 This document assumes the system already exists. The one-time path for building it in the first place isn't part of the public docs; ask the maintainer if you need it.
 
-## 1. Regional failover drill
+## 1. Multi-region write/read check
 
-This is the most important procedure in the document: an operational drill, and the shot list for the demo video (SRS Appendix A).
+**Not a region-failure test.** FR-3 is demonstrated by configuration and written explanation (SRS Appendix A), not a live region kill. This confirms the write/read path and the configuration itself.
 
-**Preconditions:** cluster provisioned per [DEPLOYMENT.md](DEPLOYMENT.md), healthy across all regions.
+**Preconditions:** cluster provisioned per [DEPLOYMENT.md](DEPLOYMENT.md), healthy across all regions, database configured for REGION survival goal per [SRS.md §6](SRS.md#6-data-model).
 
-**Run it:**
+**Confirm the configuration is actually in place:**
+
+```bash
+cockroach sql --url "$DATABASE_URL" -e "SHOW SURVIVAL GOAL FROM DATABASE defaultdb"
+# expect: (defaultdb, region) -- not (defaultdb, NULL) or (defaultdb, zone)
+```
+
+**Run the write/read check:**
 
 ```bash
 export DATABASE_URL="<cluster connection string>"
 uv run scripts/failover_drill.py
 ```
 
-The script writes a marker row, confirms it, then pauses and waits for you to actually fail a region. That's the one part it can't automate: CockroachDB Cloud's region isolation and node-drain controls are a console or API action, not something the script can trigger. Once you continue, it times the recovery, checks the result against NFR-AVAIL-01's 30s target, and prompts you to restore the region before finishing. See [scripts/failover_drill.py](scripts/failover_drill.py)'s docstring for exactly what it does and doesn't cover.
+The script writes a marker row, confirms it, then pauses at a prompt asking you to fail a region. There's no way to do that on this plan tier: press Enter to continue, and it reads the marker back immediately and reports a pass. That confirms the write/read path against the multi-region-configured database, not failure recovery. See [scripts/failover_drill.py](scripts/failover_drill.py)'s docstring for details.
 
-The one manual step in the middle still matters for what the drill proves: use CockroachDB Cloud's region-isolation or node-drain control if the console exposes one, or a network-partition workaround otherwise, and note which method you used in `docs/LOG.md`. That's step 4 in the script's own prompt.
+**Frequency:** After any change to cluster topology, schema, or Terraform config in `DEPLOYMENT.md`. Confirms nothing broke the multi-region configuration.
 
-**Frequency:** Before every demo recording, and after any change to cluster topology or Terraform config in `DEPLOYMENT.md`.
-
-**If the drill fails** (recovery over 30s, or data loss/mismatch): don't proceed to record the demo. Treat it as a blocking incident (see §3 below). This is exactly the scenario SRS risk R-05 flags.
+**If the configuration check fails** (survival goal isn't `region`, or the write/read check errors): treat as a blocking issue before recording the demo or submitting. See §3 below.
 
 ## 2. Routine operations
 
@@ -31,7 +36,7 @@ The one manual step in the middle still matters for what the drill proves: use C
 
 1. `terraform plan` against the target environment, review the diff.
 2. Apply to `staging` first; run the verification checklist in [DEPLOYMENT.md §5](DEPLOYMENT.md#5-verify-the-deployment).
-3. Re-run the failover drill (§1) on `staging` if the change touches cluster topology, Lambda IAM, or connection handling.
+3. Re-run the multi-region check (§1) on `staging` if the change touches cluster topology, Lambda IAM, or connection handling.
 4. Apply to `prod`/demo only after `staging` passes.
 
 ### Rollback
@@ -55,7 +60,7 @@ There's no one to escalate to beyond the maintainer, so this section isn't an es
 | `forget_memory` reports `deleted: false` unexpectedly | `actor_id` mismatch, or the row was already deleted (this is expected, non-error behavior; confirm it's not a bug before treating it as an incident) | Query the table directly via `cockroach sql` to confirm row state |
 | Working-memory rows not expiring | Row-level TTL misconfigured or disabled on the table | `SHOW CREATE TABLE working_memory`, confirm `ttl_expire_after` is set |
 | Semantic recall returns irrelevant results | Embedding model mismatch: dimension or model version changed without a corresponding backfill | Check SRS risk R-07; confirm `MCP_CONTINUUM_EMBEDDING_MODEL` matches what wrote the existing rows |
-| Failover drill exceeds 30s | Investigate before the next demo recording. Don't paper over it with a re-run that happens to land faster | See §1's "if the drill fails" note |
+| `SHOW SURVIVAL GOAL` doesn't return `region` | Database-level multi-region setup was skipped or reverted (see SRS §6's prerequisite) | Re-run the `ALTER DATABASE` block from [DEPLOYMENT.md §2](DEPLOYMENT.md#2-provision-the-cockroachdb-cluster) |
 
 ## 4. Decommissioning
 

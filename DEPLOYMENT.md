@@ -62,7 +62,7 @@ export DATABASE_URL="postgresql://root@<host>:26257/spike?sslmode=verify-full"
 uv run spikes/vector_index_spike.py --keep
 ```
 
-Then follow the failover procedure in [RUNBOOK.md §1](RUNBOOK.md#1-regional-failover-drill) against the rows it leaves behind. See [spikes/README.md](spikes/README.md) for what this does and doesn't cover.
+Then follow the multi-region write/read check in [RUNBOOK.md §1](RUNBOOK.md#1-multi-region-writeread-check) against the rows it leaves behind. See [spikes/README.md](spikes/README.md) for what this does and doesn't cover.
 
 ## 3. Deploy the Continuum MCP server (Lambda)
 
