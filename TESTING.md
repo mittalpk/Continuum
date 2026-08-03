@@ -28,7 +28,7 @@ uv run pytest --cov=continuum --cov-report=term-missing
 
 CI runs `unit` and `integration` on every push/PR, mirroring the discipline in [mcp-server-pgvector](https://github.com/mittalpk/mcp-server-pgvector): a real containerized database in CI, not mocks. `scenario` and config-audit checks need a real multi-region deployment, so they run manually before each demo recording instead of on every commit; see §5.
 
-There's no `chaos` test layer here despite what an earlier version of this doc said. Live region-failure injection requires a dedicated Advanced-tier cluster, which this project's plan tier doesn't provide, confirmed directly with the hackathon organizers (`.archive/LOG.md`, 2026-08-01). FR-3 is verified by configuration audit, not simulated failure.
+FR-3 is verified by configuration audit rather than simulated failure; live region-failure injection isn't available on this plan tier.
 
 ## 3. Test matrix mapped to requirements
 

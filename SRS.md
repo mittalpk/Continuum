@@ -103,17 +103,15 @@ Each requirement carries an ID, description, rationale, and acceptance criteria 
 
 ### FR-3: Multi-Region Distribution, Proven by Configuration
 
-**Description.** The CockroachDB cluster runs across 3 cloud regions, with the database configured for CockroachDB's REGION survival goal (the minimum required to survive losing a whole region, see §6). Resilience is demonstrated through correct configuration and a clear explanation of the design, not a live, on-camera region kill.
+**Description.** The CockroachDB cluster runs across 3 cloud regions, with the database configured for CockroachDB's REGION survival goal (the minimum required to survive losing a whole region, see §6). Resilience is demonstrated through correct configuration and a written design explanation, not a live, on-camera region kill: region-disruption testing requires a dedicated Advanced-tier cluster, which this project's plan tier doesn't provide, confirmed with the hackathon organizers (`.archive/LOG.md`, 2026-08-01).
 
-This wasn't the original plan. FR-3 was written assuming a literal simulated failure in the demo video. Confirmed directly with the hackathon organizers (see `.archive/LOG.md`, 2026-08-01): region-disruption testing requires a dedicated (Advanced-tier) cluster, which Standard doesn't provide, since each Basic/Standard cluster runs as a virtual cluster rather than dedicated infrastructure. Their guidance was explicit: judges assess resilience from the database's multi-region configuration and the design decisions behind it, and a written explanation field is available at submission for exactly this. A live region kill is not required or expected.
-
-**Rationale.** Multi-region configuration correctness is still what separates this entry from a plain Postgres+pgvector build. It's just demonstrated by showing the configuration is genuinely in place and explaining why it's sufficient, rather than by a demo segment that turned out to require infrastructure this project's tier can't access.
+**Rationale.** Multi-region configuration correctness is what separates this entry from a plain Postgres+pgvector build, demonstrated by showing the configuration is genuinely in place and explaining why it's sufficient.
 
 **Acceptance criteria.**
 - [ ] `SHOW SURVIVAL GOAL FROM DATABASE <database>` returns `region`, not `zone` or null, on the deployed cluster.
 - [ ] The cluster has 3 regions, matching CockroachDB's documented minimum for REGION survival goal (§6 explains why 2 isn't enough).
-- [ ] The demo video and/or submission's written explanation clearly states the configuration, cites CockroachDB's own documentation for what REGION survival goal guarantees under an actual region loss, and is explicit that live failure injection wasn't available on the plan tier used, rather than leaving a judge to assume it was tested live.
-- [ ] `scripts/failover_drill.py`'s write/read verification still runs against the live cluster under normal conditions, as evidence the configuration doesn't break anything, even though it can't inject a real regional failure to test recovery from one.
+- [ ] The submission's written explanation states the configuration and cites CockroachDB's own documentation for what REGION survival goal guarantees.
+- [ ] `scripts/failover_drill.py`'s write/read check still runs against the live cluster as a sanity check.
 
 ### FR-4: Memory Provenance (Lightweight)
 
@@ -158,9 +156,9 @@ These are targets the project holds itself to, not hackathon rules (those are in
 |---|---|---|---|---|
 | NFR-PERF-01 | Performance | `recall_memory` latency (semantic search, single region, warm cache) | p95 < 300 ms | Load test script, 100 sequential calls, percentile reported |
 | NFR-PERF-02 | Performance | `store_memory` latency (single-row write) | p95 < 150 ms | Same harness as above |
-| NFR-AVAIL-01 | Availability | Recovery Time Objective for a single-region failure | < 30 s to serve reads/writes from a surviving region | Not empirically testable on this project's plan tier (region-disruption testing requires a dedicated Advanced-tier cluster, confirmed with the hackathon organizers, `.archive/LOG.md` 2026-08-01). Target retained as CockroachDB's own documented expectation for REGION survival goal, cited rather than measured |
-| NFR-AVAIL-02 | Availability | Recovery Point Objective for a single-region failure | 0 committed writes lost | Same as above: relies on CockroachDB's documented guarantee for REGION survival goal, not an empirical test this project can run |
-| NFR-CONS-01 | Consistency | Acknowledged writes must survive a subsequent regional failure | Serializable isolation (CockroachDB default); no write is ever acknowledged to the MCP client before it is durably replicated per CockroachDB's Raft consensus | Configuration audit: `SHOW SURVIVAL GOAL FROM DATABASE <database>` returns `region`; 3 regions confirmed present. `scripts/failover_drill.py` verifies the write/read path works correctly under normal conditions as a sanity check, but can't inject the actual failure to test recovery from one |
+| NFR-AVAIL-01 | Availability | Recovery Time Objective for a single-region failure | < 30 s to serve reads/writes from a surviving region | Not empirically testable on this plan tier (needs a dedicated Advanced-tier cluster). Cited from CockroachDB's own documented REGION survival goal behavior |
+| NFR-AVAIL-02 | Availability | Recovery Point Objective for a single-region failure | 0 committed writes lost | Same as NFR-AVAIL-01 |
+| NFR-CONS-01 | Consistency | Acknowledged writes must survive a subsequent regional failure | Serializable isolation (CockroachDB default); no write is ever acknowledged to the MCP client before it is durably replicated per CockroachDB's Raft consensus | Configuration audit: `SHOW SURVIVAL GOAL FROM DATABASE <database>` returns `region`, 3 regions confirmed present. `scripts/failover_drill.py` checks the write/read path under normal conditions |
 | NFR-SCALE-01 | Scalability | Concurrent demo sessions supported | ≥ 10 concurrent `actor_id`s without cross-talk or lock contention | Scripted concurrent-session test |
 | NFR-OBS-01 | Observability | Every MCP tool call is logged with `actor_id`, `source_tool`, latency, and outcome | 100% of calls | Structured JSON logs to CloudWatch (Lambda's default sink) |
 | NFR-SEC-01 | Security | No user-supplied input reaches SQL without identifier validation or parameter binding | 100% of query paths | Code review + regression tests mirroring `mcp-server-pgvector`'s injection-attempt test suite (§1.3) |
@@ -424,7 +422,7 @@ Per the hackathon's published rules:
 - **AWS services, must use at least 1 of:** Bedrock, Lambda, ECS/EKS, S3, SageMaker, Bedrock Agents.
   **Selected:** Bedrock Agents for the reference agent's reasoning loop, Lambda for the MCP server's serverless hosting.
 - **Submission requirements:** public open-source repo (MIT or Apache 2.0), functional demo URL, demo video under 3 minutes, documentation of which tools were used and how, and an architecture diagram (optional, but included anyway in §5).
-- **Submission Q&A field:** confirmed with the organizers (`.archive/LOG.md`, 2026-08-01) that the submission form includes a written-explanation field, which is where FR-3's multi-region configuration and design rationale get explained, since it isn't demonstrated live in the video.
+- **Submission Q&A field:** the submission form includes a written-explanation field, used for FR-3's configuration and design rationale.
 - **Prizes:** 1st $5,000, 2nd $2,500, 3rd $1,250 ($8,750 total pool).
 
 ---
@@ -437,10 +435,10 @@ Per the hackathon's published rules:
 | R-02 | The learning curve for CockroachDB's Distributed Vector Indexing plus multi-region setup exceeds the timebox | Medium | High | Resolved: Day 1-3 spikes surfaced and fixed the operator-class bug, the silent single-region default, and the embedding-dimension mismatch, all within budget. No longer an open risk | Maintainer |
 | R-03 | AWS Bedrock Agents account or access provisioning is delayed | Medium | Medium | Build and test the reference agent against a mocked/local harness first (Week 2), then swap in real Bedrock Agents once access clears | Maintainer |
 | R-04 | Limited developer bandwidth relative to the hackathon's roughly 3.5-week window, given other concurrent commitments | Medium | High | Track weekly time allocation explicitly against the timeline (§14) instead of assuming the full window is available | Maintainer |
-| R-05 | Closed, moot: this risk assumed a live on-camera region kill, which the hackathon organizers confirmed isn't required or expected (`.archive/LOG.md`, 2026-08-01). FR-3 is now demonstrated by configuration and written explanation instead | N/A | N/A | No longer applicable | Maintainer |
+| R-05 | Closed: assumed a live on-camera region kill, which the hackathon organizers confirmed isn't required (`.archive/LOG.md`, 2026-08-01) | N/A | N/A | No longer applicable | Maintainer |
 | R-06 | License choice (MIT vs. Apache 2.0) stays undecided until submission | Low | Low | Decide and lock the license by Week 3, ahead of the final push to submit | Maintainer |
 | R-07 | Embedding-model dimension mismatch between what's written to `semantic_memory.embedding` and what Bedrock's chosen model actually outputs | Low | Medium | Materialized: the schema originally declared `VECTOR(1536)`, which is OpenAI's dimension, not `amazon.titan-embed-text-v2:0`'s (1024 default). Caught before any real embeddings were written and fixed in §6, Day 3. Still add the dimension-mismatch regression test called for in TESTING.md | Maintainer |
-| R-08 | The 10-day compressed schedule (§14, revised 2026-08-01) leaves less verification depth on non-demo-facing NFRs: NFR-SCALE-01 demoted to best-effort | Low | Low | Doesn't sit on FR-3/FR-6's demo path. Picked back up in the contingency buffer if there's time, logged rather than dropped quietly. (NFR-CONS-01's planned 20× sweep is moot now that live failure injection isn't available at all on this plan tier, not just reduced in count; see R-05) | Maintainer |
+| R-08 | The 10-day compressed schedule (§14, revised 2026-08-01) leaves less verification depth on non-demo-facing NFRs: NFR-SCALE-01 demoted to best-effort | Low | Low | Doesn't sit on FR-3/FR-6's demo path. Picked back up in the contingency buffer if there's time | Maintainer |
 
 ---
 
@@ -485,7 +483,7 @@ Against the Aug 18, 2026 deadline. Revised 2026-08-01: with 17 days remaining an
 
 ## Appendix A: How REGION Survival Goal Works (Reference, Not a Live Demo)
 
-This diagram illustrates the mechanism REGION survival goal actually provides, for use in the submission's written explanation of FR-3 (§ FR-3). It is not a shot list for the demo video: a live region kill isn't available on this project's plan tier, confirmed with the hackathon organizers (`.archive/LOG.md`, 2026-08-01). This sequence describes what CockroachDB's own documentation states happens under REGION survival goal, illustrated against Continuum's specific tables, not something recorded on camera.
+Illustrates the REGION survival goal mechanism for the submission's written FR-3 explanation, not a demo shot list. Describes CockroachDB's documented behavior, applied to Continuum's tables.
 
 ```mermaid
 sequenceDiagram
@@ -508,4 +506,4 @@ sequenceDiagram
     A->>U: "Yes, you reported this on [date]. Let's continue from there."
 ```
 
-This describes CockroachDB's documented consensus behavior under REGION survival goal (write requires a majority of replicas, so losing one of three regions still leaves a majority available), not a scenario Continuum triggered and recorded. Cite this diagram and CockroachDB's own multi-region documentation in the submission's explanation field rather than presenting it as something demonstrated live.
+Writes require a majority of replicas, so losing one of three regions still leaves a majority available. Cite this diagram and CockroachDB's own multi-region documentation in the submission's explanation field.

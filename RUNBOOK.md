@@ -6,7 +6,7 @@ This document assumes the system already exists. The one-time path for building 
 
 ## 1. Multi-region write/read check
 
-**This is not a region-failure test.** Live region-disruption testing requires a dedicated Advanced-tier cluster, confirmed unavailable on this project's plan tier by the hackathon organizers directly (see `.archive/LOG.md`, 2026-08-01). FR-3 is demonstrated by configuration and written explanation (SRS Appendix A), not by killing a region on camera. What follows verifies the write/read path works correctly and confirms the configuration is genuinely in place: real evidence, just not a failure simulation.
+**Not a region-failure test.** FR-3 is demonstrated by configuration and written explanation (SRS Appendix A), not a live region kill. This confirms the write/read path and the configuration itself.
 
 **Preconditions:** cluster provisioned per [DEPLOYMENT.md](DEPLOYMENT.md), healthy across all regions, database configured for REGION survival goal per [SRS.md §6](SRS.md#6-data-model).
 
@@ -24,7 +24,7 @@ export DATABASE_URL="<cluster connection string>"
 uv run scripts/failover_drill.py
 ```
 
-The script writes a marker row, confirms it, then pauses at a prompt asking you to fail a region. On this plan tier there's no way to actually do that: press Enter to continue past the prompt anyway, and the script will read the marker back immediately (since nothing actually failed) and report a pass. That's expected and fine. What this run demonstrates is that the write/read path itself is correct against the multi-region-configured database, not that failure recovery was tested. See [scripts/failover_drill.py](scripts/failover_drill.py)'s docstring for exactly what it does and doesn't cover. If a dedicated Advanced-tier cluster ever becomes available, this same script is what to point at it for a real test.
+The script writes a marker row, confirms it, then pauses at a prompt asking you to fail a region. There's no way to do that on this plan tier: press Enter to continue, and it reads the marker back immediately and reports a pass. That confirms the write/read path against the multi-region-configured database, not failure recovery. See [scripts/failover_drill.py](scripts/failover_drill.py)'s docstring for details.
 
 **Frequency:** After any change to cluster topology, schema, or Terraform config in `DEPLOYMENT.md`. Confirms nothing broke the multi-region configuration.
 
