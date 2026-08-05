@@ -66,68 +66,31 @@ Then follow the multi-region write/read check in [RUNBOOK.md §1](RUNBOOK.md#1-m
 
 ## 3. Deploy the Continuum MCP server (Lambda)
 
-Terraform skeleton (`infra/terraform/`):
+Real Terraform, not a skeleton: [infra/terraform/](infra/terraform/) (`main.tf`, `variables.tf`, `iam.tf`, `secrets.tf`, `lambda.tf`, `outputs.tf`). The Lambda's IAM role has exactly two permissions: `secretsmanager:GetSecretValue` on the one CockroachDB secret, and `logs:*` scoped to its own log group. Nothing broader; see [SECURITY.md](SECURITY.md) and `infra/terraform/iam.tf` directly.
 
-```hcl
-# infra/terraform/main.tf
-
-terraform {
-  required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.0" }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-}
-
-resource "aws_secretsmanager_secret" "cockroachdb_url" {
-  name = "continuum/database-url"
-}
-
-resource "aws_secretsmanager_secret_version" "cockroachdb_url" {
-  secret_id     = aws_secretsmanager_secret.cockroachdb_url.id
-  secret_string = var.database_url # supply via -var, never commit
-}
-
-resource "aws_iam_role" "continuum_lambda" {
-  name               = "continuum-mcp-server"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-}
-
-resource "aws_iam_role_policy" "continuum_lambda_secrets" {
-  role   = aws_iam_role.continuum_lambda.id
-  policy = data.aws_iam_policy_document.lambda_secrets_access.json
-}
-
-resource "aws_lambda_function" "continuum_mcp_server" {
-  function_name = "continuum-mcp-server"
-  role          = aws_iam_role.continuum_lambda.arn
-  handler       = "continuum.server.handler"
-  runtime       = "python3.12"
-  timeout       = 30
-  filename      = var.lambda_package_path
-
-  environment {
-    variables = {
-      COCKROACHDB_SECRET_ARN     = aws_secretsmanager_secret.cockroachdb_url.arn
-      MCP_CONTINUUM_EMBEDDING_MODEL = var.embedding_model_id
-      MCP_CONTINUUM_COMMAND_TIMEOUT_SECONDS = "30"
-    }
-  }
-}
-```
+**Build the deployment package.** A bare wheel isn't enough here: Lambda needs the package's dependencies bundled alongside it, not resolved at runtime.
 
 ```bash
-cd continuum/
-uv build --wheel -o infra/build/
+uv export --no-dev --format requirements-txt > infra/build/requirements.txt
+pip install -r infra/build/requirements.txt -t infra/build/package \
+  --python-version 3.12 --only-binary=:all: --platform manylinux2014_x86_64
+cp -r src/continuum infra/build/package/
+(cd infra/build/package && zip -r ../continuum-lambda.zip .)
+```
+
+**Deploy:**
+
+```bash
 cd infra/terraform/
+cp terraform.tfvars.example terraform.tfvars   # fill in aws_region, etc. -- never commit the real file
 terraform init
-terraform plan -var="database_url=$DATABASE_URL" -var="aws_region=<region>" -var="embedding_model_id=amazon.titan-embed-text-v2:0"
+terraform plan -var="database_url=$DATABASE_URL"
 terraform apply
 ```
 
-The Lambda's IAM role must have **only**: `secretsmanager:GetSecretValue` on the one secret above, and `logs:*` for its own CloudWatch log group. Nothing broader; see [SECURITY.md](SECURITY.md).
+`terraform output function_url` gives the HTTP endpoint to point Bedrock Agents or any MCP client at.
+
+**Not verified end to end.** There's no AWS account access available in this project's build environment to actually run `terraform apply` or invoke the deployed Lambda — the files above are real, reviewed HCL (brace-balanced, every `var.X` reference matches a declared variable), and `continuum.server`'s construction is verified locally (see `tests/unit/test_server.py`), but an actual deployment and a real MCP client completing the protocol handshake against it are still open. Tracked in `.archive/LOG.md`, not hidden.
 
 ## 4. Deploy the reference agent (Bedrock Agents)
 

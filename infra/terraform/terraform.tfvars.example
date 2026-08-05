@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in real values. Never commit the real
+# file -- infra/terraform/*.tfvars is gitignored, this .example file is the
+# one exception (see .gitignore).
+
+aws_region          = "eu-central-1"
+environment_name    = "staging"
+embedding_model_id  = "amazon.titan-embed-text-v2:0"
+lambda_package_path = "../build/continuum-lambda.zip"
+
+# Supply database_url via -var or TF_VAR_database_url instead of putting it
+# here, even in this example file's real copy -- it's a secret.
