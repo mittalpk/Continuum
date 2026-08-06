@@ -98,6 +98,8 @@ terraform apply
 2. Author the agent's instructions to call `recall_memory`/`list_episodes` at session start and `store_memory` when the user states a durable preference or issue. This is the behavior SRS FR-5's acceptance criteria check for.
 3. Deploy an agent alias for the demo environment.
 
+**Until Bedrock access is available:** `src/continuum/agent.py` is a local harness implementing the same policy (recall at session start, store on a stated preference/issue) by calling the tool functions directly instead of going through a real Bedrock Agents action group. It's what `tests/unit/test_agent.py` and `tests/integration/test_agent.py` exercise. Swap it for the steps above once real Bedrock access clears; nothing about the tool contracts changes either way.
+
 Full acceptance test for this step: SRS FR-5's two-session cross-recall check (also exercised by `TESTING.md`'s end-to-end scenario).
 
 ## 5. Verify the deployment
