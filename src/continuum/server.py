@@ -2,17 +2,16 @@
 exposed over Streamable HTTP, adapted to Lambda via Mangum.
 
 Verified locally: server construction, the Starlette app building, and the
-Mangum wrap all succeed at import time (tests/unit/test_server.py). What
-isn't verified: an actual Lambda invocation, or a real MCP client completing
-the protocol handshake against this -- there's no AWS access in this
-environment to test the former, and the latter needs a real client driving
-the exchange, not just importability. Both are open per .archive/LOG.md;
+Mangum wrap all succeed at import time (tests/unit/test_server.py). Not yet
+verified: an actual Lambda invocation, pending AWS account access, and a real
+MCP client completing the protocol handshake, which needs a real client
+driving the exchange, not just importability. Both open per .archive/LOG.md;
 don't treat this file as more proven than that.
 
 This mcp SDK version's Server API takes constructor callbacks
 (on_list_tools/on_call_tool) rather than the older @server.list_tools()
-decorator style some public examples use -- checked directly against the
-installed package rather than assumed from memory.
+decorator style some public examples use. Confirmed against the installed
+package before writing this, not assumed from memory.
 """
 
 import json

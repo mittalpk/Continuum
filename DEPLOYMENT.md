@@ -90,7 +90,7 @@ terraform apply
 
 `terraform output function_url` gives the HTTP endpoint to point Bedrock Agents or any MCP client at.
 
-**Not verified end to end.** There's no AWS account access available in this project's build environment to actually run `terraform apply` or invoke the deployed Lambda — the files above are real, reviewed HCL (brace-balanced, every `var.X` reference matches a declared variable), and `continuum.server`'s construction is verified locally (see `tests/unit/test_server.py`), but an actual deployment and a real MCP client completing the protocol handshake against it are still open. Tracked in `.archive/LOG.md`, not hidden.
+**Not verified end to end yet.** `terraform apply` and an actual Lambda invocation are pending real AWS account access. The files above are real, reviewed HCL (brace-balanced, every `var.X` reference matches a declared variable), and `continuum.server`'s construction is verified locally (see `tests/unit/test_server.py`), but an actual deployment and a real MCP client completing the protocol handshake against it are still open. Tracked in `.archive/LOG.md`.
 
 ## 4. Deploy the reference agent (Bedrock Agents)
 
