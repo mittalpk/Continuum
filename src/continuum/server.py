@@ -1,12 +1,14 @@
 """Lambda entrypoint: wires the four MCP tools into an mcp.server.Server,
 exposed over Streamable HTTP, adapted to Lambda via Mangum.
 
-Verified locally: server construction, the Starlette app building, and the
-Mangum wrap all succeed at import time (tests/unit/test_server.py). Not yet
-verified: an actual Lambda invocation, pending AWS account access, and a real
-MCP client completing the protocol handshake, which needs a real client
-driving the exchange, not just importability. Both open per .archive/LOG.md;
-don't treat this file as more proven than that.
+Verified locally: server construction and the Starlette app building
+(tests/unit/test_server.py), and a real MCP client (the official SDK's
+ClientSession, over a real loopback HTTP connection) completing the full
+initialize handshake, listing tools, and calling store_memory against a
+locally running instance (tests/integration/test_mcp_client.py). Not yet
+verified: an actual Lambda invocation and Mangum's event translation, pending
+AWS account access. Open per .archive/LOG.md; don't treat this file as more
+proven than that.
 
 This mcp SDK version's Server API takes constructor callbacks
 (on_list_tools/on_call_tool) rather than the older @server.list_tools()
