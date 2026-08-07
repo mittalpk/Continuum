@@ -53,6 +53,8 @@ Point any MCP client (Claude Desktop, MCP Inspector, or the Bedrock reference ag
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Component design, data model, request flow, trade-offs |
 | [docs/adr/](docs/adr/) | Why the load-bearing decisions were made |
 | [docs/api/mcp-tools.md](docs/api/mcp-tools.md) | MCP tool reference with examples |
+| [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | The submission video's shot list |
+| [docs/SUBMISSION_NOTES.md](docs/SUBMISSION_NOTES.md) | Draft answers for the hackathon submission form |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Provisioning the cluster, Lambda, and reference agent |
 | [RUNBOOK.md](RUNBOOK.md) | Operating a deployed system: failover drill, rollback, incident response |
 | [SECURITY.md](SECURITY.md) | Threat model, secrets handling, disclosure policy |
