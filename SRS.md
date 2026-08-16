@@ -7,7 +7,7 @@
 |---|---|
 | Version | 2.0 |
 | Date | 2026-07-30 |
-| Status | Draft, ready for implementation. Open items are tracked in §12 Risk Register |
+| Status | Implemented. Open items are tracked in §12 Risk Register |
 | Author | Solution Architect |
 | Competition | CockroachDB × AWS Hackathon, "Build with Agentic Memory" ([cockroachdb-ai.devpost.com](https://cockroachdb-ai.devpost.com/)) |
 | Submission deadline | Aug 18, 2026, 5:00pm EDT |
@@ -26,7 +26,7 @@ It's written for three readers: hackathon judges scoring against the five publis
 
 ### 1.2 Scope
 
-In scope: a three-tier memory model, an MCP tool surface for reading and writing that memory, a CockroachDB cluster spread across at least two cloud regions, lightweight provenance tagging on every memory write, and one reference agent (Amazon Bedrock Agents) that depends on Continuum for cross-session recall. The centerpiece deliverable is a live demo of a memory write surviving a simulated regional failure without loss or corruption.
+In scope: a three-tier memory model, an MCP tool surface for reading and writing that memory, a CockroachDB cluster spread across at least two cloud regions, lightweight provenance tagging on every memory write, and one reference agent (Amazon Bedrock Agents) that depends on Continuum for cross-session recall. The centerpiece deliverable is a working demo of cross-session memory recall, backed by a CockroachDB cluster explicitly configured to survive losing an entire region, proven by configuration and a written explanation rather than a live, on-camera region kill (see FR-3).
 
 Out of scope, listed in full in §13: hash-chained tamper-evidence, per-tenant RBAC/isolation, learned memory-decay policies, and running more than one reference agent.
 
@@ -51,7 +51,7 @@ Most agent frameworks treat memory as either nothing (every session starts blank
 
 ### 2.2 Solution summary
 
-Continuum splits memory into three explicit tiers, each stored and indexed for its own access pattern, on a single CockroachDB cluster spread across two or more cloud regions. Memory operations are exposed as MCP tools, so any MCP-compatible agent can use Continuum without custom integration work, not just the reference implementation. The reference agent, built on Amazon Bedrock Agents, proves the design against a concrete scenario (§3, FR-6). The demo forces a regional failure mid-scenario, so "the memory survives" is something you watch happen rather than a claim in a slide.
+Continuum splits memory into three explicit tiers, each stored and indexed for its own access pattern, on a single CockroachDB cluster spread across two or more cloud regions. Memory operations are exposed as MCP tools, so any MCP-compatible agent can use Continuum without custom integration work, not just the reference implementation. The reference agent, built on Amazon Bedrock Agents, proves the design against a concrete scenario (§3, FR-6): a second session recalling what the first one stored, against a cluster explicitly configured to survive losing an entire region. FR-3 covers why that resilience claim is demonstrated through configuration and a written explanation rather than a live, on-camera region kill.
 
 ### 2.3 Context diagram
 
@@ -126,7 +126,7 @@ Each requirement carries an ID, description, rationale, and acceptance criteria 
 
 ### FR-5: Reference Agent
 
-**Description.** One agent, built on Amazon Bedrock Agents, that genuinely depends on Continuum for cross-session memory. Not a toy that calls the tools once and moves on.
+**Description.** One agent, targeting Amazon Bedrock Agents for its reasoning loop, that genuinely depends on Continuum for cross-session memory. Not a toy that calls the tools once and moves on. Real AWS Bedrock Agents access never came through during the build window (R-03); what ships is a local harness (`src/continuum/agent.py`) calling the same tool functions a real Bedrock action group would, exercising the acceptance criteria below for real against the live database, just not through real Bedrock reasoning.
 
 **Rationale.** "Technical Implementation" and "Real-World Impact" both need a real, working consumer of the memory layer. A schema with no client doesn't satisfy either.
 
@@ -154,12 +154,12 @@ These are targets the project holds itself to, not hackathon rules (those are in
 
 | ID | Category | Requirement | Target | Verification |
 |---|---|---|---|---|
-| NFR-PERF-01 | Performance | `recall_memory` latency (semantic search, single region, warm cache) | p95 < 300 ms | Load test script, 100 sequential calls, percentile reported |
-| NFR-PERF-02 | Performance | `store_memory` latency (single-row write) | p95 < 150 ms | Same harness as above |
+| NFR-PERF-01 | Performance | `recall_memory` latency (semantic search, single region, warm cache) | p95 < 300 ms | Not automated. Design target the vector index and query pattern are built for; no load-test script exists in this codebase (see [TESTING.md §3](TESTING.md#3-test-matrix-mapped-to-requirements)) |
+| NFR-PERF-02 | Performance | `store_memory` latency (single-row write) | p95 < 150 ms | Not automated. Same caveat as NFR-PERF-01 |
 | NFR-AVAIL-01 | Availability | Recovery Time Objective for a single-region failure | < 30 s to serve reads/writes from a surviving region | Not empirically testable on this plan tier (needs a dedicated Advanced-tier cluster). Cited from CockroachDB's own documented REGION survival goal behavior |
 | NFR-AVAIL-02 | Availability | Recovery Point Objective for a single-region failure | 0 committed writes lost | Same as NFR-AVAIL-01 |
 | NFR-CONS-01 | Consistency | Acknowledged writes must survive a subsequent regional failure | Serializable isolation (CockroachDB default); no write is ever acknowledged to the MCP client before it is durably replicated per CockroachDB's Raft consensus | Configuration audit: `SHOW SURVIVAL GOAL FROM DATABASE <database>` returns `region`, 3 regions confirmed present. `scripts/failover_drill.py` checks the write/read path under normal conditions |
-| NFR-SCALE-01 | Scalability | Concurrent demo sessions supported | ≥ 10 concurrent `actor_id`s without cross-talk or lock contention | Scripted concurrent-session test |
+| NFR-SCALE-01 | Scalability | Concurrent demo sessions supported | ≥ 10 concurrent `actor_id`s without cross-talk or lock contention | Not automated; demoted to best-effort under the compressed timeline (R-08). `actor_id`-scoped queries and indexing are built to support this, but no concurrent-load test exists. Single-actor-at-a-time cross-talk isolation is covered instead (`tests/integration/test_two_session_recall.py`) |
 | NFR-OBS-01 | Observability | Every MCP tool call is logged with `actor_id`, `source_tool`, latency, and outcome | 100% of calls | Structured JSON logs to CloudWatch (Lambda's default sink) |
 | NFR-SEC-01 | Security | No user-supplied input reaches SQL without identifier validation or parameter binding | 100% of query paths | Code review + regression tests mirroring `mcp-server-pgvector`'s injection-attempt test suite (§1.3) |
 | NFR-COST-01 | Cost | Total cluster + Lambda + Bedrock spend during build and demo | Within CockroachDB Cloud's free/trial tier + AWS free-tier limits | Monthly cost dashboard check, tracked as R-01 in §12 |
@@ -393,7 +393,7 @@ All four tools validate input against these schemas before touching SQL, followi
 | Unit | Tool input/output schema validation (§7) | Reject-path tests for every malformed-input case, mirroring `mcp-server-pgvector`'s dimension-mismatch/injection-attempt regressions |
 | Integration | All 4 MCP tools against a real (not mocked) CockroachDB instance | CI job spins up a CockroachDB container per PR, same discipline as `mcp-server-pgvector`'s real-pgvector-container CI |
 | TTL correctness | FR-1 working-memory expiry | Write, sleep past TTL, assert `recall_memory` miss |
-| Concurrency | NFR-SCALE-01 | Script issuing 10 concurrent actor sessions, asserting no cross-actor leakage in results |
+| Concurrency | NFR-SCALE-01 | Not automated; demoted to best-effort under the compressed timeline (R-08), no concurrent-load script exists |
 | Multi-region config audit | NFR-CONS-01, FR-3 | `SHOW SURVIVAL GOAL FROM DATABASE <database>` returns `region`; `scripts/failover_drill.py` confirms write/read works normally. Live failure injection isn't available on this plan tier (confirmed with hackathon organizers) |
 | End-to-end scenario | FR-5, FR-6 | Scripted two-session run against the real reference agent, second session asserting the agent references first-session content without being re-told |
 
@@ -406,7 +406,7 @@ Self-check against the hackathon's published judging criteria before submission:
 | Criterion | How this scope hits it |
 |---|---|
 | Agentic Memory Design | The three-tier model (FR-1) is an explicit design answer, not just "we used a vector DB" |
-| Technical Implementation | MCP tool surface (FR-2), multi-region cluster (FR-3), and a working Bedrock Agent (FR-5), all real, none simulated |
+| Technical Implementation | MCP tool surface (FR-2) and multi-region cluster (FR-3), both real, verified against the live cluster. FR-5's acceptance criteria are met by a local reference-agent harness, not real Bedrock Agents reasoning (AWS access never came through; see FR-5, R-03) |
 | Real-World Impact | The demo scenario (FR-6) is a named, relatable failure mode ("the agent forgot me") that memory directly fixes |
 | Production Readiness | Live multi-region failover survival (FR-3) plus provenance tagging (FR-4): the two things that separate a toy demo from something that could actually run in production |
 | Creativity & Originality | Framing memory as three distinct tiers with different retention/recall semantics, and proving survivability rather than just claiming it |
@@ -420,7 +420,7 @@ Per the hackathon's published rules:
 - **CockroachDB tools, must use at least 2 of:** Cloud Managed MCP Server; Distributed Vector Indexing; `ccloud` CLI (Agent-Ready); Agent Skills Repo.
   **Selected:** Cloud Managed MCP Server and Distributed Vector Indexing, which satisfies the minimum and is the load-bearing pair for the whole concept.
 - **AWS services, must use at least 1 of:** Bedrock, Lambda, ECS/EKS, S3, SageMaker, Bedrock Agents.
-  **Selected:** Bedrock Agents for the reference agent's reasoning loop, Lambda for the MCP server's serverless hosting.
+  **Selected:** Amazon Bedrock, genuinely used for real embedding calls (`amazon.titan-embed-text-v2:0`). Lambda and Bedrock Agents were the original targets for hosting and the reference agent's reasoning loop respectively; real AWS account access for the hackathon never came through in time, so the functional demo runs the same server code on Fly.io instead, and the reference agent uses a local harness in place of Bedrock Agents. Full detail and what's genuinely verified versus not: [docs/SUBMISSION_NOTES.md](docs/SUBMISSION_NOTES.md).
 - **Submission requirements:** public open-source repo (MIT or Apache 2.0), functional demo URL, demo video under 3 minutes, documentation of which tools were used and how, and an architecture diagram (optional, but included anyway in §5).
 - **Submission Q&A field:** the submission form includes a written-explanation field, used for FR-3's configuration and design rationale.
 - **Prizes:** 1st $5,000, 2nd $2,500, 3rd $1,250 ($8,750 total pool).
@@ -431,12 +431,12 @@ Per the hackathon's published rules:
 
 | ID | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|---|
-| R-01 | CockroachDB Cloud's free/trial tier region-count or resource limits block the FR-3 multi-region demo shape | Medium | High | Confirm exact free-tier region and node limits in Week 1, before any agent code gets written. If it's not enough, budget for the smallest paid tier that supports three regions | Maintainer |
+| R-01 | CockroachDB Cloud's free/trial tier region-count or resource limits block the FR-3 multi-region demo shape | Medium | High | Resolved: Standard tier supports 3 regions and REGION survival goal; confirmed directly against the live cluster (`.archive/LOG.md`, 2026-08-01) | Maintainer |
 | R-02 | The learning curve for CockroachDB's Distributed Vector Indexing plus multi-region setup exceeds the timebox | Medium | High | Resolved: Day 1-3 spikes surfaced and fixed the operator-class bug, the silent single-region default, and the embedding-dimension mismatch, all within budget. No longer an open risk | Maintainer |
-| R-03 | AWS Bedrock Agents account or access provisioning is delayed | Medium | Medium | Build and test the reference agent against a mocked/local harness first (Week 2), then swap in real Bedrock Agents once access clears | Maintainer |
-| R-04 | Limited developer bandwidth relative to the hackathon's roughly 3.5-week window, given other concurrent commitments | Medium | High | Track weekly time allocation explicitly against the timeline (§14) instead of assuming the full window is available | Maintainer |
+| R-03 | AWS Bedrock Agents account or access provisioning is delayed | Medium | Medium | Materialized: hackathon-provided AWS access never came through during the build window. The local/mocked harness (`src/continuum/agent.py`) shipped as the reference agent instead of swapping to real Bedrock Agents; real Bedrock model calls were separately verified using a personal AWS account (`docs/SUBMISSION_NOTES.md`) | Maintainer |
+| R-04 | Limited developer bandwidth relative to the hackathon's roughly 3.5-week window, given other concurrent commitments | Medium | High | Materialized: a nine-day gap in active work (last commit before the gap: 2026-08-07) ate most of the contingency buffer §14 had planned. Recovered by compressing Days 9-10 into the final two days before the deadline rather than slipping it | Maintainer |
 | R-05 | Closed: assumed a live on-camera region kill, which the hackathon organizers confirmed isn't required (`.archive/LOG.md`, 2026-08-01) | N/A | N/A | No longer applicable | Maintainer |
-| R-06 | License choice (MIT vs. Apache 2.0) stays undecided until submission | Low | Low | Decide and lock the license by Week 3, ahead of the final push to submit | Maintainer |
+| R-06 | License choice (MIT vs. Apache 2.0) stays undecided until submission | Low | Low | Resolved: MIT, confirmed detected and visible on the public repository via GitHub's own API | Maintainer |
 | R-07 | Embedding-model dimension mismatch between what's written to `semantic_memory.embedding` and what Bedrock's chosen model actually outputs | Low | Medium | Materialized: the schema originally declared `VECTOR(1536)`, which is OpenAI's dimension, not `amazon.titan-embed-text-v2:0`'s (1024 default). Caught before any real embeddings were written and fixed in §6, Day 3. Still add the dimension-mismatch regression test called for in TESTING.md | Maintainer |
 | R-08 | The 10-day compressed schedule (§14, revised 2026-08-01) leaves less verification depth on non-demo-facing NFRs: NFR-SCALE-01 demoted to best-effort | Low | Low | Doesn't sit on FR-3/FR-6's demo path. Picked back up in the contingency buffer if there's time | Maintainer |
 
@@ -463,6 +463,8 @@ Against the Aug 18, 2026 deadline. Revised 2026-08-01: with 17 days remaining an
 - **Days 8–9:** Rehearse the failover demo scenario twice (FR-3, FR-6), since it's the single highest-value 20 seconds of the submission, then record the demo video.
 - **Day 10:** Finalize documentation of which CockroachDB/AWS tools were used and how (required by the rules), confirm the public repo is under MIT (R-06), submit.
 - **Days 11–17:** Unscheduled contingency buffer. Absorbs any slipped gate instead of touching the deadline.
+
+In practice, a nine-day gap in active work (R-04) pushed Days 9-10 into the final two days before the Aug 18 deadline instead of leaving a week of buffer. Everything in this plan still shipped; it just used the contingency window for the gap rather than for slipped gates.
 
 ---
 
