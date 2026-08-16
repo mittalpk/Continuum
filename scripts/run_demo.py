@@ -1,4 +1,4 @@
-"""Runs the exact scenario in docs/DEMO_SCRIPT.md against the real live
+"""Runs the session-one/session-two cross-recall scenario against the real live
 cluster, so the person recording the video can screen-record this running
 rather than staging anything. Every tool call shown really happens; nothing
 here is pre-baked output.
