@@ -22,6 +22,8 @@ import mcp.types as types
 from mangum import Mangum
 from mcp.server.lowlevel.server import Server
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
 
 from continuum.errors import ValidationError
 from continuum.tools.forget_memory import forget_memory
@@ -144,8 +146,25 @@ mcp_server = Server(
 # per-deployment allowlist; SECURITY.md already documents that this server
 # has no real request-level authentication, so this isn't a regression of
 # that posture.
+
+
+async def _index(_request):
+    # This is an MCP server, not a browsable web app: nothing renders here
+    # beyond a plain-text pointer. Added because a bare 404 at "/" was the
+    # first thing anyone clicking the demo URL from a browser would see.
+    return PlainTextResponse(
+        "Continuum MCP server.\n\n"
+        "This is a Model Context Protocol server, not a web UI -- there's "
+        "nothing to browse here. Point an MCP client (Claude Desktop, the "
+        "MCP Inspector, or any Streamable HTTP-capable client) at /mcp.\n\n"
+        "Source, docs, and the demo video: "
+        "https://github.com/mittalpk/Continuum\n"
+    )
+
+
 app = mcp_server.streamable_http_app(
     stateless_http=True,
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    custom_starlette_routes=[Route("/", _index, methods=["GET"])],
 )
 handler = Mangum(app)

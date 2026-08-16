@@ -7,7 +7,7 @@ Continuum gives an [MCP](https://modelcontextprotocol.io/)-compatible agent pers
 
 Built for the [CockroachDB × AWS "Build with Agentic Memory" Hackathon](https://cockroachdb-ai.devpost.com/).
 
-**Live demo:** [https://continuum-mcp.fly.dev/mcp](https://continuum-mcp.fly.dev/mcp) — the real MCP server, running against the live multi-region cluster. See [docs/SUBMISSION_NOTES.md](docs/SUBMISSION_NOTES.md) for why it's hosted on Fly.io rather than the originally-targeted AWS Lambda.
+**Live demo:** [https://continuum-mcp.fly.dev](https://continuum-mcp.fly.dev) — the real MCP server (endpoint at `/mcp`, an MCP client speaks Streamable HTTP there, not a browsable page), running against the live multi-region cluster. See [docs/SUBMISSION_NOTES.md](docs/SUBMISSION_NOTES.md) for why it's hosted on Fly.io rather than the originally-targeted AWS Lambda.
 
 ## Why
 
