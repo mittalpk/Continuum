@@ -21,6 +21,7 @@ import json
 import mcp.types as types
 from mangum import Mangum
 from mcp.server.lowlevel.server import Server
+from mcp.server.transport_security import TransportSecuritySettings
 
 from continuum.errors import ValidationError
 from continuum.tools.forget_memory import forget_memory
@@ -134,5 +135,17 @@ mcp_server = Server(
 # stateless_http=True: each Lambda invocation is independent, there's no
 # persistent process to hold a session between calls the way a long-running
 # server would.
-app = mcp_server.streamable_http_app(stateless_http=True)
+#
+# transport_security: streamable_http_app() auto-enables Host-header
+# allowlisting whenever no explicit `host` is passed, restricted to
+# 127.0.0.1/localhost. That breaks the moment this sits behind any real
+# reverse proxy (Fly.io, or Lambda behind API Gateway), which presents its
+# own hostname on every request. Disabled rather than hand-maintaining a
+# per-deployment allowlist; SECURITY.md already documents that this server
+# has no real request-level authentication, so this isn't a regression of
+# that posture.
+app = mcp_server.streamable_http_app(
+    stateless_http=True,
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
 handler = Mangum(app)
