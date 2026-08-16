@@ -7,6 +7,8 @@ Continuum gives an [MCP](https://modelcontextprotocol.io/)-compatible agent pers
 
 Built for the [CockroachDB × AWS "Build with Agentic Memory" Hackathon](https://cockroachdb-ai.devpost.com/).
 
+**Live demo:** [https://continuum-mcp.fly.dev/mcp](https://continuum-mcp.fly.dev/mcp) — the real MCP server, running against the live multi-region cluster. See [docs/SUBMISSION_NOTES.md](docs/SUBMISSION_NOTES.md) for why it's hosted on Fly.io rather than the originally-targeted AWS Lambda.
+
 ## Why
 
 Most agent memory today is either nothing (every session starts blank) or a single vector store with everything dumped in as "semantic." That's not how memory actually works. What happened *this turn* needs different handling than what happened *last week*, which needs different handling than a durable fact about a user. And none of it matters if a region outage wipes it out the moment someone actually relies on it.
